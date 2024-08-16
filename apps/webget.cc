@@ -1,16 +1,32 @@
+#include "address.hh"
+#include "file_descriptor.hh"
 #include "socket.hh"
 
 #include <cstdlib>
 #include <iostream>
 #include <span>
 #include <string>
+#include <sys/socket.h>
 
 using namespace std;
 
 void get_URL( const string& host, const string& path )
 {
   cerr << "Function called: get_URL(" << host << ", " << path << ")\n";
-  cerr << "Warning: get_URL() has not been implemented yet.\n";
+  // cerr << "Warning: get_URL() has not been implemented yet.\n";
+  TCPSocket sock;
+  sock.connect(Address(host, "http"));
+  sock.write("GET " + path + " HTTP/1.1\r\n" +
+             "Host: " + host + "\r\n" + 
+             "Connection: close\r\n\r\n");
+  sock.shutdown(SHUT_WR);
+  string dummy;
+  while(!sock.eof())
+  {
+    sock.read(dummy);
+    cout << dummy;
+  }
+  sock.close();
 }
 
 int main( int argc, char* argv[] )
