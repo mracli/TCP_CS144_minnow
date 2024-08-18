@@ -27,7 +27,6 @@ protected:
   bool error_ {};
   bool closed_ {};
 
-  uint64_t h_ = 0, t_ = 0;
   std::string buffer_ {};
   uint64_t pushed_size_ = 0;
   uint64_t popped_size_ = 0;

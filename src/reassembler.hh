@@ -1,6 +1,9 @@
 #pragma once
 
 #include "byte_stream.hh"
+#include <cstdint>
+#include <utility>
+#include <vector>
 
 class Reassembler
 {
@@ -41,5 +44,16 @@ public:
   const Writer& writer() const { return output_.writer(); }
 
 private:
+  // insert unvalid data into storage_
+  void insert_into_storage(const uint64_t first_index, std::string &&data);
+
+  // pop all valid data into output_
+  void pop_from_storage();
+
+private:
+  uint64_t bytes_pending_ = 0;
+  std::vector<std::pair<uint64_t, std::string>> storage_ = {};
+  bool has_last_ = {false};
+  uint64_t last_index = 0;
   ByteStream output_; // the Reassembler writes to this ByteStream
 };

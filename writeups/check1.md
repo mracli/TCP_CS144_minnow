@@ -21,8 +21,17 @@ bugs, asymptotic performance, empirical performance, required
 implementation time and difficulty, and other factors. Include any
 measurements if applicable.]
 
+流重组器的结构：
+
+- vector<pair<size_t, string> > 保存待重组的数据，这些数据保证不重且在窗口范围内
+- bool has_last 标记是否有 last_str 等待插入
+- has_last 保存已读到最后一个字符串的记录
+- 在合适的时机关闭 bytestream 写端
+
 Implementation Challenges:
-[]
+[
+    需要处理 data 在不同情况下插入到重组器是应该如何处理，主要分为两种情况，可以和不可以直接插入到 bytestream 的 buffer 中，不可以插入的话应该如何将data 不重复的补充到 storage 中
+]
 
 Remaining Bugs:
 []
