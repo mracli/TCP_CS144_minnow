@@ -51,7 +51,7 @@ bool Reader::is_finished() const
 uint64_t Reader::bytes_popped() const
 {
   // Your code here.
-  return poppepd_size_;
+  return popped_size_;
 }
 
 string_view Reader::peek() const
@@ -66,7 +66,7 @@ void Reader::pop( uint64_t len )
   if(buffer_.empty()) return;
   len = std::min(len, buffer_.size());
   buffer_.erase(0, len);
-  poppepd_size_ += len;
+  popped_size_ += len;
 }
 
 uint64_t Reader::bytes_buffered() const

@@ -15,7 +15,15 @@ My secret code from section 2.1 was: [code here]
 
 I was surprised by or edified to learn that: [describe]
 
-Describe ByteStream implementation. [Describe data structures and
+Describe ByteStream implementation. 
+
+字节流实现：底层采用 string 实现，同时记录已经压入的字节数量 (`pushed_size_`) 和被上层使用并弹出的数量 (`popped_size_`);
+
+优势：使用 string 缓存的信息可以通过 string_view 获取对应的视图，较少内存拷贝开销;
+
+最终 `speed_test` 结果：在云服务器中可达到 2.5Gbps;
+
+[Describe data structures and
 approach taken. Describe alternative designs considered or tested.
 Describe benefits and weaknesses of your design compared with
 alternatives -- perhaps in terms of simplicity/complexity, risk of
