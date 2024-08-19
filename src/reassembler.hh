@@ -43,6 +43,10 @@ public:
   // Access output stream writer, but const-only (can't write from outside)
   const Writer& writer() const { return output_.writer(); }
 
+  void ser_error() { output_.set_error(); }
+
+  bool has_error() const { return writer().has_error(); }
+
 private:
   // insert unvalid data into storage_
   void insert_into_storage(const uint64_t first_index, std::string &&data);

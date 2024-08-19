@@ -3,6 +3,9 @@
 #include "reassembler.hh"
 #include "tcp_receiver_message.hh"
 #include "tcp_sender_message.hh"
+#include "wrapping_integers.hh"
+#include <optional>
+#include <sys/types.h>
 
 class TCPReceiver
 {
@@ -25,6 +28,12 @@ public:
   const Reader& reader() const { return reassembler_.reader(); }
   const Writer& writer() const { return reassembler_.writer(); }
 
+  void set_error() { reassembler_.ser_error(); }
+
+  bool has_error() const { return reassembler_.has_error(); }
+
 private:
+  std::optional<Wrap32> isn_ = std::nullopt;
+  u_int64_t ackno_ = 0;
   Reassembler reassembler_;
 };
