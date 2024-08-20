@@ -28,7 +28,9 @@ TCPReceiver 中，需要考虑当前消息对应实际的流index在哪里，需
 同时，如果 Receiver 初始化前丢弃任何非 SYN报文的请求，仅建立 SYN 报文才开始处理message; 如果对端发来的 message 中出现了 RST 标志置 true 的情况，说明当前连接已经非法，那么我们同步设置当前状态为 error，同时当我们的bytestream 处于 error 状态时，发送任何 message 都会置 RST 为 true
 
 Implementation Challenges:
-[]
+[
+    如何计算 seq_no -> abs_seq_no, 需要考虑的边界以及溢出情况；
+]
 
 Remaining Bugs:
 []
