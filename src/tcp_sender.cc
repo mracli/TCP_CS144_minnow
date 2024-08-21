@@ -96,7 +96,7 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
     bool flag = false;
     while ( outstanding_segments_.size() ) {
       auto& front_seg = outstanding_segments_.front();
-      // front seg still not send to peer successfully
+      // front seg still not sent to peer successfully
       if ( front_seg.seqno.unwrap( isn_, next_seq_no_ ) + front_seg.sequence_length() > abs_acked_no_ )
         break;
       seq_no_in_flight_cnt_ -= front_seg.sequence_length();
