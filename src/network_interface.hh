@@ -1,9 +1,14 @@
 #pragma once
 
+#include <cstdint>
+#include <list>
+#include <map>
 #include <queue>
+#include <utility>
 
 #include "address.hh"
 #include "ethernet_frame.hh"
+#include "ethernet_header.hh"
 #include "ipv4_datagram.hh"
 
 // A "network interface" that connects IP (the internet layer, or network layer)
@@ -65,13 +70,24 @@ public:
   OutputPort& output() { return *port_; }
   std::queue<InternetDatagram>& datagrams_received() { return datagrams_received_; }
 
+  constexpr static uint32_t ARP_RESPONSE_TIME_MS = 5 * 1000;
+
+  constexpr static uint32_t ARP_TIME_MS = 30 * 1000;
 private:
+  struct EthernetEntry
+  {
+    uint32_t ttl;
+    EthernetAddress addr;
+  };
+
   // Human-readable name of the interface
   std::string name_;
 
   // The physical output port (+ a helper function `transmit` that uses it to send an Ethernet frame)
   std::shared_ptr<OutputPort> port_;
   void transmit( const EthernetFrame& frame ) const { port_->transmit( *this, frame ); }
+
+  void _send_frame(const EthernetAddress dst, const uint16_t type, std::vector<std::string> &&payload);
 
   // Ethernet (known as hardware, network-access-layer, or link-layer) address of the interface
   EthernetAddress ethernet_address_;
@@ -81,4 +97,13 @@ private:
 
   // Datagrams that have been received
   std::queue<InternetDatagram> datagrams_received_ {};
+
+  // Table which saves (next_ip, mac_address) pair
+  std::map<uint32_t, EthernetEntry> arp_table_ {};
+
+  // Table which saves ARP requests in-flight, in case of ARP request flood
+  std::map<uint32_t, size_t> waiting_arp_response_table_ {};
+
+  // Table records all ip should be sent but don't know where to send
+  std::map<uint32_t, std::list<InternetDatagram>> buffered_ip_table_ {};
 };
