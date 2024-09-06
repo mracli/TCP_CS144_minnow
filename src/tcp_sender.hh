@@ -54,7 +54,6 @@ private:
   Timer timer_;
 
   uint64_t next_seq_no_ = 0;
-  uint64_t abs_acked_no_ = 0;
   uint64_t window_size_ = 1;
 
   uint64_t retransmission_cnt_ = 0;

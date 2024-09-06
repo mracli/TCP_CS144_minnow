@@ -24,40 +24,41 @@ void TCPSender::push( const TransmitFunction& transmit )
 {
   // Your code here.
   auto const cur_window_size = window_size_ ? window_size_ : 1u;
-  while ( cur_window_size > seq_no_in_flight_cnt_ ) {
-    auto const available_window = cur_window_size - seq_no_in_flight_cnt_;
+  while ( cur_window_size >= sequence_numbers_in_flight() ) {
+    auto const available_window = cur_window_size - sequence_numbers_in_flight();
     auto msg = make_empty_message();
-    if ( !syn_ )
-      syn_ = msg.SYN = true;
-
-    auto const payload_size = min( TCPConfig::MAX_PAYLOAD_SIZE, available_window );
-    read( input_.reader(), payload_size, msg.payload );
-
-    if ( !fin_ && reader().is_finished() && available_window )
-      fin_ = msg.FIN = true;
-
     if(msg.RST){
       transmit(msg);
       break;
     }
+    if ( !syn_ )
+      syn_ = msg.SYN = true;
+
+    auto const payload_size = min(min(
+      TCPConfig::MAX_PAYLOAD_SIZE, 
+      available_window - msg.sequence_length()),
+      reader().bytes_buffered());
+    read( input_.reader(), payload_size, msg.payload );
+
+    if ( !fin_ && reader().is_finished() && available_window > msg.sequence_length() )
+      fin_ = msg.FIN = true;
+
     // when sequence_length == 0, which is meaningless message
-    if (!msg.sequence_length() )
-      break;
+    if (msg.sequence_length() == 0) break;
 
     // special case: FIN message cannot exceed receiver's window
     if ( msg.FIN && available_window < msg.sequence_length() )
       fin_ = msg.FIN = false;
     
-    seq_no_in_flight_cnt_ += msg.sequence_length();
-    outstanding_segments_.push( msg );
-    next_seq_no_ += msg.sequence_length();
-    transmit( msg );
+    const auto size = msg.sequence_length();
 
-    if ( msg.FIN || reader().bytes_buffered() == 0 )
-      break;
-  }
-  if ( !timer_.is_running() ) {
-    timer_.start();
+    seq_no_in_flight_cnt_ += size;
+    next_seq_no_ += size;
+    outstanding_segments_.push( msg );
+    transmit( msg );
+    if ( !timer_.is_running() ) {
+      timer_.start();
+    }
   }
   if(outstanding_segments_.empty())
     timer_.stop();
@@ -72,6 +73,8 @@ TCPSenderMessage TCPSender::make_empty_message() const
 void TCPSender::receive( const TCPReceiverMessage& msg )
 {
   // Your code here.
+  window_size_ = msg.window_size;
+
   if ( msg.RST ) {
     set_error();
     timer_.stop();
@@ -79,34 +82,28 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
   // error state, don't do any thing!
   if ( has_error() )
     return;
-  window_size_ = msg.window_size;
   // no any ackno is meaningless
   if ( !msg.ackno.has_value() )
     return;
 
   auto const received_abs_ack_no = msg.ackno->unwrap( isn_, next_seq_no_ );
-  if ( received_abs_ack_no > next_seq_no_
-       || received_abs_ack_no < outstanding_segments_.front().seqno.unwrap( isn_, next_seq_no_ ) )
+  if ( received_abs_ack_no > next_seq_no_ )
     return;
-  abs_acked_no_ = received_abs_ack_no;
 
   // Now we got the newest msg to update current state
   // check if any outstanding segments already received.
-  bool has_newdata = [&] {
-    bool flag = false;
-    while ( outstanding_segments_.size() ) {
-      auto& front_seg = outstanding_segments_.front();
-      // front seg still not sent to peer successfully
-      if ( front_seg.seqno.unwrap( isn_, next_seq_no_ ) + front_seg.sequence_length() > abs_acked_no_ )
-        break;
-      seq_no_in_flight_cnt_ -= front_seg.sequence_length();
-      outstanding_segments_.pop();
-      flag = true;
-    }
-    return flag;
-  }();
+  bool success = false;
+  while ( outstanding_segments_.size() ) {
+    auto& front_seg = outstanding_segments_.front();
+    // front seg still not sent to peer successfully
+    if ( front_seg.seqno.unwrap( isn_, next_seq_no_ ) + front_seg.sequence_length() > received_abs_ack_no )
+      break;
+    seq_no_in_flight_cnt_ -= front_seg.sequence_length();
+    outstanding_segments_.pop();
+    success = true;
+  }
 
-  if ( has_newdata ) {
+  if ( success ) {
     timer_.reset_RTO();
     retransmission_cnt_ = 0;
     timer_.start();
