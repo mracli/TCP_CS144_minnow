@@ -21,10 +21,38 @@ void Router::add_route( const uint32_t route_prefix,
        << " on interface " << interface_num << "\n";
 
   // Your code here.
+  _route_table.emplace_back( route_prefix, prefix_length, next_hop, interface_num );
 }
 
 // Go through all the interfaces, and route every incoming datagram to its proper outgoing interface.
 void Router::route()
 {
   // Your code here.
+  for ( auto interface : _interfaces ) {
+    auto& queue = interface->datagrams_received();
+
+    while ( queue.size() ) {
+      _route_one_datagram( queue.front() );
+      queue.pop();
+    }
+  }
+}
+
+void Router::_route_one_datagram( InternetDatagram& dgram )
+{
+  const auto dst_ip = dgram.header.dst;
+  auto result_it = _route_table.end();
+  for ( auto it = _route_table.begin(); it != _route_table.end(); ++it ) {
+    if ( it->prefix_length == 0 || ( ( it->route_prefix ^ dst_ip ) >> ( 32 - it->prefix_length ) ) == 0 ) {
+      if ( result_it == _route_table.end() || it->prefix_length > result_it->prefix_length )
+        result_it = it;
+    }
+  }
+
+  if ( result_it != _route_table.end() && dgram.header.ttl > 1 ) {
+    --dgram.header.ttl;
+    dgram.header.compute_checksum();
+    auto next_interface = interface(result_it->interface_num);
+    next_interface->send_datagram( dgram, result_it->next_hop.value_or( Address::from_ipv4_numeric( dst_ip ) ) );
+  }
 }
