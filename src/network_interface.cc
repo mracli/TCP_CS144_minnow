@@ -32,10 +32,14 @@ NetworkInterface::NetworkInterface( string_view name,
 void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Address& next_hop )
 {
   // Your code here.
-  const auto next_hop_ip = next_hop.ipv4_numeric();
+  const uint32_t next_hop_ip = next_hop.ipv4_numeric();
+  if ( dgram.header.proto != IPv4Header::PROTO_TCP )
+    return;
+
   auto it = arp_table_.find( next_hop_ip );
   if ( it == arp_table_.end() ) {
     // arp 表中没找到，那就发送ARP请求给邻居，找一下是否存在需要的mac地址
+    buffered_ip_table_[next_hop_ip].emplace_back( dgram );
     if ( waiting_arp_response_table_.find( next_hop_ip ) == waiting_arp_response_table_.end() ) {
       // 构建一个 arp payload
       ARPMessage arp_msg;
@@ -44,12 +48,11 @@ void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Addre
       arp_msg.target_ethernet_address = {};
       arp_msg.target_ip_address = next_hop_ip;
       arp_msg.opcode = ARPMessage::OPCODE_REQUEST;
-      _send_frame( ETHERNET_BROADCAST, EthernetHeader::TYPE_ARP, serialize( arp_msg ) );
       waiting_arp_response_table_.emplace( next_hop_ip, ARP_RESPONSE_TIME_MS );
+      _prep_send_frame( ETHERNET_BROADCAST, EthernetHeader::TYPE_ARP, serialize( arp_msg ) );
     }
-    buffered_ip_table_[next_hop_ip].emplace_back( dgram );
   } else {
-    _send_frame(it->second.addr, EthernetHeader::TYPE_IPv4, serialize(dgram));
+    _prep_send_frame( it->second.addr, EthernetHeader::TYPE_IPv4, serialize( dgram ) );
   }
 }
 
@@ -63,12 +66,24 @@ void NetworkInterface::recv_frame( const EthernetFrame& frame )
     return;
   if ( header.type == EthernetHeader::TYPE_IPv4 ) {
     InternetDatagram dgram;
-    parse( dgram, frame.payload );
-    datagrams_received().emplace( std::move( dgram ) );
+    if ( !parse( dgram, frame.payload ) )
+      return;
+    datagrams_received().emplace( dgram );
   }
   if ( header.type == EthernetHeader::TYPE_ARP ) {
     ARPMessage msg;
-    parse( msg, frame.payload );
+    if ( !parse( msg, frame.payload ) )
+      return;
+    // 不管是哪种ARPMessage 我们都用来更新 ARP table
+    arp_table_[msg.sender_ip_address] = { ARP_TIME_MS, msg.sender_ethernet_address };
+    // 检查一下是否有对应的next_hop_ip datagram 需要发送
+    auto it = buffered_ip_table_.find( msg.sender_ip_address );
+    if ( it != buffered_ip_table_.end() ) {
+      for ( auto dgram_it = it->second.begin(); dgram_it != it->second.end(); dgram_it++ ) {
+        _prep_send_frame( msg.sender_ethernet_address, EthernetHeader::TYPE_IPv4, serialize( *dgram_it ) );
+      }
+      buffered_ip_table_.erase( it );
+    }
     if ( msg.opcode == ARPMessage::OPCODE_REQUEST && msg.target_ip_address == ip_address_.ipv4_numeric() ) {
       ARPMessage reply_msg;
       reply_msg.sender_ethernet_address = ethernet_address_;
@@ -76,17 +91,7 @@ void NetworkInterface::recv_frame( const EthernetFrame& frame )
       reply_msg.target_ethernet_address = msg.sender_ethernet_address;
       reply_msg.target_ip_address = msg.sender_ip_address;
       reply_msg.opcode = ARPMessage::OPCODE_REPLY;
-      _send_frame(msg.sender_ethernet_address, EthernetHeader::TYPE_ARP, serialize(reply_msg));
-    }
-    // 不管是哪种ARPMessage 我们都用来更新 ARP table
-    arp_table_[msg.sender_ip_address] = { ARP_TIME_MS, msg.sender_ethernet_address };
-    // 检查一下是否有对应的next_hop_ip datagram 需要发送
-    auto it = buffered_ip_table_.find( msg.sender_ip_address );
-    if ( it != buffered_ip_table_.end() ) {
-      for ( auto dgram_it = it->second.begin(); dgram_it != it->second.end(); dgram_it++ ) {
-        _send_frame(msg.sender_ethernet_address, EthernetHeader::TYPE_IPv4, serialize(std::move(*dgram_it)));
-      }
-      buffered_ip_table_.erase( it );
+      _prep_send_frame( msg.sender_ethernet_address, EthernetHeader::TYPE_ARP, serialize( reply_msg ) );
     }
   }
 }
@@ -100,6 +105,10 @@ void NetworkInterface::tick( const size_t ms_since_last_tick )
       it->second -= ms_since_last_tick;
       ++it;
     } else {
+      auto it2 = buffered_ip_table_.find( it->first );
+      if ( it2 != buffered_ip_table_.end() ) {
+        buffered_ip_table_.erase( it2 );
+      }
       it = waiting_arp_response_table_.erase( it );
     }
   }
@@ -109,19 +118,23 @@ void NetworkInterface::tick( const size_t ms_since_last_tick )
       it->second.ttl -= ms_since_last_tick;
       ++it;
     } else {
+      auto it2 = buffered_ip_table_.find( it->first );
+      if ( it2 != buffered_ip_table_.end() ) {
+        buffered_ip_table_.erase( it2 );
+      }
       it = arp_table_.erase( it );
     }
   }
 }
 
-void NetworkInterface::_send_frame( const EthernetAddress dst,
-                                    const uint16_t type,
-                                    std::vector<std::string>&& payload )
+void NetworkInterface::_prep_send_frame( const EthernetAddress dst,
+                                         const uint16_t type,
+                                         std::vector<std::string>&& payload )
 {
   EthernetFrame frame;
   frame.header.src = ethernet_address_;
   frame.header.dst = dst;
   frame.header.type = type;
-  frame.payload = std::move( payload );
-  transmit( std::move( frame ) );
+  frame.payload = payload;
+  transmit( std::move(frame) );
 }

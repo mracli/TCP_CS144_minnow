@@ -87,7 +87,7 @@ private:
   std::shared_ptr<OutputPort> port_;
   void transmit( const EthernetFrame& frame ) const { port_->transmit( *this, frame ); }
 
-  void _send_frame(const EthernetAddress dst, const uint16_t type, std::vector<std::string> &&payload);
+  void _prep_send_frame(const EthernetAddress dst, const uint16_t type, std::vector<std::string> &&payload);
 
   // Ethernet (known as hardware, network-access-layer, or link-layer) address of the interface
   EthernetAddress ethernet_address_;
