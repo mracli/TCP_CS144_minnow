@@ -10,7 +10,9 @@
 #include "exception.hh"
 #include "ipv4_datagram.hh"
 #include "network_interface.hh"
-
+#ifdef _ROUTER_TRIE
+#include "trie.hh"
+#endif
 // \brief A router that has multiple network interfaces and
 // performs longest-prefix-match routing between them.
 class Router
@@ -44,7 +46,7 @@ private:
 private:
   // The router's collection of network interfaces
   std::vector<std::shared_ptr<NetworkInterface>> _interfaces {};
-
+#ifndef _ROUTER_TRIE
   struct RouteEntry
   {
     uint32_t route_prefix;
@@ -54,4 +56,7 @@ private:
   };
 
   std::vector<RouteEntry> _route_table {};
+#else
+  Trie route_table_ {};
+#endif
 };
